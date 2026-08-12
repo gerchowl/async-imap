@@ -295,6 +295,33 @@ impl<T: Read + Write + Unpin + fmt::Debug + Send> Client<T> {
         Ok(session)
     }
 
+    /// Like [`authenticate`](Self::authenticate) but sends the SASL initial
+    /// response inline on the `AUTHENTICATE` line (RFC 4959 `SASL-IR`):
+    /// `AUTHENTICATE <type> <base64(initial-response)>`.
+    ///
+    /// This is what Thunderbird/Outlook send. Microsoft Exchange Online's IMAP
+    /// front-end resets the connection on the continuation-style flow (empty
+    /// `AUTHENTICATE XOAUTH2`, then the response on a `+` continuation) for
+    /// XOAUTH2, but accepts the SASL-IR form. The `authenticator`'s
+    /// `process(&[])` supplies the initial response; any subsequent server
+    /// challenges (e.g. a base64 error blob) are handled by the same handshake
+    /// loop as `authenticate`.
+    pub async fn authenticate_sasl_ir<A: Authenticator, S: AsRef<str>>(
+        mut self,
+        auth_type: S,
+        mut authenticator: A,
+    ) -> ::std::result::Result<Session<T>, (Error, Client<T>)> {
+        let initial = authenticator.process(&[]);
+        let ir = base64::engine::general_purpose::STANDARD.encode(&initial);
+        let id = ok_or_unauth_client_err!(
+            self.run_command(&format!("AUTHENTICATE {} {}", auth_type.as_ref(), ir))
+                .await,
+            self
+        );
+        let session = self.do_auth_handshake(id, authenticator).await?;
+        Ok(session)
+    }
+
     /// This func does the handshake process once the authenticate command is made.
     async fn do_auth_handshake<A: Authenticator>(
         mut self,
