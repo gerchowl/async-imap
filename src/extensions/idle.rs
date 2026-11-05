@@ -52,8 +52,10 @@ impl<T: Read + Write + Unpin + fmt::Debug> Unpin for Handle<T> {}
 impl<T: Read + Write + Unpin + fmt::Debug + Send> Stream for Handle<T> {
     type Item = std::io::Result<ResponseData>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.as_mut().session().get_stream().poll_next(cx)
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.get_mut().session)
+            .get_stream()
+            .poll_next(cx)
     }
 }
 
@@ -67,8 +69,6 @@ pub struct IdleStream<'a, St> {
 impl<St: Unpin> Unpin for IdleStream<'_, St> {}
 
 impl<'a, St: Stream + Unpin> IdleStream<'a, St> {
-    unsafe_pinned!(stream: &'a mut St);
-
     pub(crate) fn new(stream: &'a mut St) -> Self {
         IdleStream { stream }
     }
@@ -86,7 +86,7 @@ impl<St: Stream + Unpin> Stream for IdleStream<'_, St> {
     type Item = St::Item;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.stream().poll_next(cx)
+        Pin::new(&mut *self.get_mut().stream).poll_next(cx)
     }
 }
 
@@ -110,8 +110,6 @@ impl<T: Read + Write + Unpin + fmt::Debug> AsMut<T> for Handle<T> {
 }
 
 impl<T: Read + Write + Unpin + fmt::Debug + Send> Handle<T> {
-    unsafe_pinned!(session: Session<T>);
-
     pub(crate) fn new(session: Session<T>) -> Handle<T> {
         Handle { session, id: None }
     }

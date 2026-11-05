@@ -368,10 +368,8 @@ impl<T: Read + Write + Unpin + fmt::Debug + Send> Client<T> {
 }
 
 impl<T: Read + Write + Unpin + fmt::Debug + Send> Session<T> {
-    unsafe_pinned!(conn: Connection<T>);
-
     pub(crate) fn get_stream(self: Pin<&mut Self>) -> Pin<&mut ImapStream<T>> {
-        self.conn().stream()
+        Pin::new(&mut self.get_mut().conn.stream)
     }
 
     // not public, just to avoid duplicating the channel creation code
@@ -1420,8 +1418,6 @@ impl<T: Read + Write + Unpin + fmt::Debug + Send> Session<T> {
 }
 
 impl<T: Read + Write + Unpin + fmt::Debug> Connection<T> {
-    unsafe_pinned!(stream: ImapStream<T>);
-
     /// Gets a reference to the underlying stream.
     pub fn get_ref(&self) -> &T {
         self.stream.get_ref()
